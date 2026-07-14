@@ -23,39 +23,41 @@
   const soundtrack =
     document.getElementById("weddingSoundtrack");
 
-  const supportsMotionPath =
-    typeof CSS !== "undefined" &&
-    typeof CSS.supports === "function" &&
-    CSS.supports("offset-path", "path('M 0 0 L 1 1')");
+  const mainRoutePath =
+    document.getElementById("routePathTrail");
+
+  const mainRouteViewBox = {
+    width: 720,
+    height: 120,
+  };
 
   let isJourneyRunning = false;
 
- const storyStops = [
-  {
-    image: "images/transition/filomena.jpg",
-    caption: "Fuenlabrada",
-    text: "Donde los planes dejaron de ser ideas para convertirse en un futuro juntos.",
-    rotate: "-5deg",
-    planePosition: "0%",
-    fallbackLeft: "8%"
-  },
-  {
-    image: "images/transition/delphi.jpg",
-    caption: "Irlanda",
-    text: "Donde descubrimos que el hogar también podía estar lejos.",
-    rotate: "4deg",
-    planePosition: "50%",
-    fallbackLeft: "50%"
-  },
-  {
-    image: "images/transition/hawaianas.jpg",
-    caption: "Madridejos",
-    text: "Donde nació nuestro sueño compartido y donde comienza la aventura más importante de todas.",
-    rotate: "-3deg",
-    planePosition: "100%",
-    fallbackLeft: "92%"
-    }
-];
+  let mainPlaneProgress = 0;
+
+  const storyStops = [
+    {
+      image: "images/transition/filomena.jpg",
+      caption: "Fuenlabrada",
+      text: "Donde los planes dejaron de ser ideas para convertirse en un futuro juntos.",
+      rotate: "-5deg",
+      planePosition: 0,
+    },
+    {
+      image: "images/transition/delphi.jpg",
+      caption: "Irlanda",
+      text: "Donde descubrimos que el hogar también podía estar lejos.",
+      rotate: "4deg",
+      planePosition: 0.5,
+    },
+    {
+      image: "images/transition/hawaianas.jpg",
+      caption: "Madridejos",
+      text: "Donde nació nuestro sueño compartido y donde comienza la aventura más importante de todas.",
+      rotate: "-3deg",
+      planePosition: 1,
+    },
+  ];
 
     /*
     Precarga las imágenes para que estén listas
@@ -64,7 +66,74 @@
   storyStops.forEach((stop) => {
     const image = new Image();
     image.src = stop.image;
-  })
+  });
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function easeInOutCubic(t) {
+    return t < 0.5
+      ? 4 * t * t * t
+      : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  function getPathFrame(pathEl, progress) {
+    const totalLength = pathEl.getTotalLength();
+    const targetLength = clamp(progress, 0, 1) * totalLength;
+    const currentPoint = pathEl.getPointAtLength(targetLength);
+    const nextPoint = pathEl.getPointAtLength(
+      Math.min(totalLength, targetLength + Math.max(4, totalLength * 0.005))
+    );
+
+    const angle = Math.atan2(
+      nextPoint.y - currentPoint.y,
+      nextPoint.x - currentPoint.x
+    ) * 180 / Math.PI;
+
+    return { currentPoint, angle };
+  }
+
+  function applyPlaneFrame(planeEl, pathEl, progress, viewBoxWidth, viewBoxHeight) {
+    if (!planeEl || !pathEl) return;
+
+    const { currentPoint, angle } = getPathFrame(pathEl, progress);
+
+    planeEl.style.offsetPath = "none";
+    planeEl.style.offsetDistance = "0%";
+    planeEl.style.transition = "none";
+    planeEl.style.left = `${(currentPoint.x / viewBoxWidth) * 100}%`;
+    planeEl.style.top = `${(currentPoint.y / viewBoxHeight) * 100}%`;
+    planeEl.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+  }
+
+  function animatePlaneFrame(planeEl, pathEl, fromProgress, toProgress, duration, viewBoxWidth, viewBoxHeight) {
+    if (!planeEl || !pathEl) return Promise.resolve();
+
+    planeEl.style.offsetPath = "none";
+    planeEl.style.offsetDistance = "0%";
+    planeEl.style.transition = "none";
+
+    const startTime = window.performance.now();
+
+    return new Promise((resolve) => {
+      function step(now) {
+        const elapsed = clamp((now - startTime) / duration, 0, 1);
+        const eased = easeInOutCubic(elapsed);
+        const progress = fromProgress + (toProgress - fromProgress) * eased;
+
+        applyPlaneFrame(planeEl, pathEl, progress, viewBoxWidth, viewBoxHeight);
+
+        if (elapsed < 1) {
+          window.requestAnimationFrame(step);
+        } else {
+          resolve();
+        }
+      }
+
+      window.requestAnimationFrame(step);
+    });
+  }
 
   function wait(milliseconds) {
     return new Promise((resolve) => {
@@ -173,50 +242,29 @@ function resetJourneyState() {
   journeyTransition.classList.remove("is-active");
   startJourneyButton.classList.remove("is-clicked");
 
-  if (flyingPlane) {
-    if (supportsMotionPath) {
-      flyingPlane.style.transition = "none";
-      flyingPlane.style.offsetDistance = "0%";
-      flyingPlane.style.left = "";
-      requestAnimationFrame(() => {
-        flyingPlane.style.transition =
-          "offset-distance 2.2s cubic-bezier(.45, 0, .2, 1)";
-      });
-    } else {
-      flyingPlane.style.left = storyStops[0].fallbackLeft;
-    }
+  if (flyingPlane && mainRoutePath) {
+    mainPlaneProgress = 0;
+    applyPlaneFrame(
+      flyingPlane,
+      mainRoutePath,
+      0,
+      mainRouteViewBox.width,
+      mainRouteViewBox.height
+    );
   }
 
   document.querySelectorAll(".map-stop").forEach((s) => {
     s.classList.remove("is-active");
   });
 
-  const trailPath = document.getElementById("routePathTrail");
-  if (trailPath) {
-    const len = trailPath.getTotalLength ? trailPath.getTotalLength() : 1000;
-    trailPath.style.transition = "none";
-    trailPath.style.strokeDashoffset = len;
-    requestAnimationFrame(() => {
-      trailPath.style.transition =
-        "stroke-dashoffset 2.2s cubic-bezier(.45, 0, .2, 1)";
-    });
+  if (mainRoutePath) {
+    const len = mainRoutePath.getTotalLength();
+    mainRoutePath.style.strokeDashoffset = len;
   }
 
   if (storyPolaroid) {
     storyPolaroid.classList.remove("is-visible", "is-leaving");
   }
-}
-
-function movePlaneTo(stopIndex) {
-  const stop = storyStops[stopIndex];
-  if (!stop || !flyingPlane) return;
-
-  if (supportsMotionPath) {
-    flyingPlane.style.offsetDistance = stop.planePosition;
-    return;
-  }
-
-  flyingPlane.style.left = stop.fallbackLeft;
 }
 
   async function playJourney(nextPage) {
@@ -225,20 +273,24 @@ function movePlaneTo(stopIndex) {
     await wait(700);
 
     // Calcular longitud real del path para la estela
-    const trailPath = document.getElementById("routePathTrail");
-    const totalLength = trailPath && trailPath.getTotalLength
-      ? trailPath.getTotalLength()
-      : 1000;
+    const totalLength = mainRoutePath.getTotalLength();
 
-    if (trailPath) {
-      trailPath.style.strokeDasharray = "4 6";
-      trailPath.style.strokeDashoffset = totalLength;
+    if (mainRoutePath) {
+      mainRoutePath.style.strokeDasharray = "4 6";
+      mainRoutePath.style.strokeDashoffset = totalLength;
     }
 
     const stops = document.querySelectorAll(".map-stop");
 
     // ── Parada 0: Fuenlabrada ──
-    movePlaneTo(0);
+    applyPlaneFrame(
+      flyingPlane,
+      mainRoutePath,
+      storyStops[0].planePosition,
+      mainRouteViewBox.width,
+      mainRouteViewBox.height
+    );
+    mainPlaneProgress = storyStops[0].planePosition;
     stops[0]?.classList.add("is-active");
 
     await showPhoto(storyStops[0]);
@@ -246,8 +298,17 @@ function movePlaneTo(stopIndex) {
     await hidePhoto();
 
     // Volar hacia parada 1 + dibujar primera mitad de estela
-    movePlaneTo(1);
-    if (trailPath) trailPath.style.strokeDashoffset = totalLength / 2;
+    if (mainRoutePath) mainRoutePath.style.strokeDashoffset = totalLength / 2;
+    animatePlaneFrame(
+      flyingPlane,
+      mainRoutePath,
+      mainPlaneProgress,
+      storyStops[1].planePosition,
+      2200,
+      mainRouteViewBox.width,
+      mainRouteViewBox.height
+    );
+    mainPlaneProgress = storyStops[1].planePosition;
 
     await wait(2800);
     stops[1]?.classList.add("is-active");
@@ -257,8 +318,17 @@ function movePlaneTo(stopIndex) {
     await hidePhoto();
 
     // Volar hacia parada 2 + completar estela
-    movePlaneTo(2);
-    if (trailPath) trailPath.style.strokeDashoffset = 0;
+    if (mainRoutePath) mainRoutePath.style.strokeDashoffset = 0;
+    animatePlaneFrame(
+      flyingPlane,
+      mainRoutePath,
+      mainPlaneProgress,
+      storyStops[2].planePosition,
+      2200,
+      mainRouteViewBox.width,
+      mainRouteViewBox.height
+    );
+    mainPlaneProgress = storyStops[2].planePosition;
 
     await wait(2800);
     stops[2]?.classList.add("is-active");
