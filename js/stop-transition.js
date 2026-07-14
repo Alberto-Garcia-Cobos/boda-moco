@@ -24,10 +24,12 @@ const stopTransitionTitle = document.getElementById(
 
 const miniPlane = document.getElementById("miniPlane");
 
-const supportsMotionPath =
-  typeof CSS !== "undefined" &&
-  typeof CSS.supports === "function" &&
-  CSS.supports("offset-path", "path('M 0 0 L 1 1')");
+const miniArcPath = document.getElementById("miniArcPath");
+
+const miniArcViewBox = {
+  width: 200,
+  height: 50,
+};
 
 let isStopTransitionRunning = false;
 const miniFlightDuration = 1350;
@@ -43,32 +45,66 @@ function resetMiniStopsState() {
   }
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function easeInOutCubic(t) {
+  return t < 0.5
+    ? 4 * t * t * t
+    : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+function getMiniFrame(progress) {
+  const totalLength = miniArcPath.getTotalLength();
+  const targetLength = clamp(progress, 0, 1) * totalLength;
+  const currentPoint = miniArcPath.getPointAtLength(targetLength);
+  const nextPoint = miniArcPath.getPointAtLength(
+    Math.min(totalLength, targetLength + Math.max(3, totalLength * 0.01))
+  );
+
+  const angle = Math.atan2(
+    nextPoint.y - currentPoint.y,
+    nextPoint.x - currentPoint.x
+  ) * 180 / Math.PI;
+
+  return { currentPoint, angle };
+}
+
+function applyMiniFrame(progress) {
+  if (!miniPlane || !miniArcPath) return;
+
+  const { currentPoint, angle } = getMiniFrame(progress);
+
+  miniPlane.style.offsetPath = "none";
+  miniPlane.style.offsetDistance = "0%";
+  miniPlane.style.transition = "none";
+  miniPlane.style.left = `${(currentPoint.x / miniArcViewBox.width) * 100}%`;
+  miniPlane.style.top = `${(currentPoint.y / miniArcViewBox.height) * 100}%`;
+  miniPlane.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+}
+
 function animateMiniPlane() {
   if (!miniPlane) return;
 
+  miniPlane.style.offsetPath = "none";
+  miniPlane.style.offsetDistance = "0%";
   miniPlane.style.transition = "none";
 
-  if (supportsMotionPath) {
-    miniPlane.style.offsetDistance = "0%";
-    miniPlane.style.left = "";
-  } else {
-    miniPlane.style.left = "0%";
-  }
+  const startTime = window.performance.now();
 
-  // Forzamos el estado inicial antes de lanzar el vuelo.
-  void miniPlane.offsetWidth;
+  const step = (now) => {
+    const elapsed = clamp((now - startTime) / miniFlightDuration, 0, 1);
+    const progress = easeInOutCubic(elapsed);
 
-  miniPlane.style.transition =
-    "offset-distance 1.35s cubic-bezier(.35, 0, .25, 1), left 1.35s cubic-bezier(.35, 0, .25, 1)";
+    applyMiniFrame(progress);
 
-  requestAnimationFrame(() => {
-    if (supportsMotionPath) {
-      miniPlane.style.offsetDistance = "100%";
-      return;
+    if (elapsed < 1) {
+      window.requestAnimationFrame(step);
     }
+  };
 
-    miniPlane.style.left = "100%";
-  });
+  window.requestAnimationFrame(step);
 }
 
 if (nextStopButtons.length && stopTransition) {
@@ -109,6 +145,8 @@ if (nextStopButtons.length && stopTransition) {
 
       resetMiniStopsState();
       stopTransitionFrom?.classList.add("is-origin");
+
+      applyMiniFrame(0);
 
       stopTransition.classList.add("is-active");
       animateMiniPlane();
