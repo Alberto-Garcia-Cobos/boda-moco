@@ -454,18 +454,6 @@
   }
 }
 
-/* Fallback para móvil sin soporte offset-path */
-@media (max-width: 1024px) {
-  .flying-plane {
-    offset-path: none !important;
-    offset-distance: 0 !important;
-    offset-rotate: auto;
-    left: 8%;
-    top: 52%;
-    transform: translate(-50%, -50%) rotate(14deg) !important;
-  }
-}
-
 @media (max-width: 760px) {
   .transition-kicker {
     margin-bottom: 32px;
@@ -485,11 +473,6 @@
 
   .flying-plane {
     font-size: 1.7rem;
-    offset-path: none !important;
-    offset-distance: 0 !important;
-    left: 8%;
-    top: 52%;
-    transform: translate(-50%, -50%) rotate(14deg) !important;
   }
 }
 
@@ -711,10 +694,14 @@
 
 @media (max-width: 760px) {
   .mini-route {
-    flex-direction: column;
+    gap: 10px;
   }
 
   .mini-arc {
-    transform: rotate(90deg);
+    width: clamp(54px, 14vw, 120px);
+  }
+
+  .mini-plane {
+    font-size: 1.45rem;
   }
 }
